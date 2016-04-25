@@ -1,5 +1,8 @@
 var CACHE_NAME = 'shri-2016-task3-1';
-
+/*
+* worker.js надо было вынести в корень проекта, так как 
+* его область видимости ограничивалась /js
+* */
 var urlsToCache = [
   '/',
   '/css/index.css',
@@ -16,29 +19,6 @@ self.addEventListener('install', (event) => {
     );
 });
 
-function fetchAndPutToCache(request) {
-    var fetchRequest = request.clone();
-    return fetch(fetchRequest).then((response) => {
-        return caches.open(CACHE_NAME).then((cache) => {
-            cache.put(fetchRequest, response.clone());
-            return response || caches.match(request).then(function (response) {
-                    return response
-                });
-        })
-    }).catch((error) => {
-        console.log('Error: ' + error);
-    })
-}
-
-//self.addEventListener('fetch', function(event) {
-//    console.log(typeof caches.match(event.request))
-//    return event.respondWith(
-//         caches.match(event.request).then(function (response) {
-//                 return response || fetchAndPutToCache(event.request);
-//        })
-//    );
-//});
-
 self.addEventListener('fetch', function(event) {
     const requestURL = new URL(event.request.url);
 
@@ -49,39 +29,37 @@ self.addEventListener('fetch', function(event) {
 
     if (/^\/api\/v1/.test(requestURL.pathname)) {
         return event.respondWith(
-            fetchAndPutToCache(event.request)
-            //caches.match(event.request).then(function (response) {
-            //    return response || fetchAndPutToCache(event.request);
-            //})
+            Promise.race([
+                fetchAndPutToCache(event.request),
+                getFromCache(event.request)
+            ])
         );
     }
-
+    /*Сервис воркер не устанавливался из-за ошибки - лишняя точка с запятой*/
     return event.respondWith(
-        caches.match(event.request).then(function (response) {
-            return response || fetchAndPutToCache(event.request);
-        })
+        getFromCache(event.request).catch(fetchAndPutToCache)
     );
 });
 
-//function fetchAndPutToCache(request) {
-//    return fetch(request).then((response) => {
-//        const responseToCache = response.clone();
-//        return caches.open(CACHE_NAME)
-//            .then((cache) => {
-//                cache.put(request, responseToCache);
-//            })
-//            .then(() => response);
-//    })
-//    .catch(() => caches.match(request));
-//}
-//
-//function getFromCache(request) {
-//    return caches.match(request)
-//        .then((response) => {
-//            if (response) {
-//                return response;
-//            }
-//
-//            return Promise.reject();
-//        });
-//}
+function fetchAndPutToCache(request) {
+    return fetch(request).then((response) => {
+            const responseToCache = response.clone();
+            return caches.open(CACHE_NAME)
+                .then((cache) => {
+                    cache.put(request, responseToCache);
+                })
+                .then(() => response);
+        })
+        .catch(() => caches.match(request));
+}
+
+function getFromCache(request) {
+    return caches.match(request)
+        .then((response) => {
+            if (response) {
+                return response;
+            }
+
+            return Promise.reject();
+        });
+}
